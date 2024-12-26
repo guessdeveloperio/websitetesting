@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lobbies</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: url('createjoin.png') no-repeat center center fixed;
+            background-size: cover;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+
+        #back-button {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 100px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        #back-button:hover {
+            transform: scale(1.1);
+        }
+
+        #refresh-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 50px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        #refresh-button:hover {
+            transform: scale(1.1);
+        }
+
+        #lobby-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 800px;
+            background-color: rgba(0, 0, 50, 0.8);
+            border-radius: 15px;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: center;
+            padding: 10px;
+            border-bottom: 1px solid white;
+        }
+
+        th {
+            font-size: 18px;
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        td {
+            font-size: 16px;
+        }
+
+        .join-button {
+            background-color: white;
+            color: black;
+            border: none;
+            border-radius: 15px;
+            padding: 5px 15px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.3s ease, background-color 0.3s ease;
+        }
+
+        .join-button:hover {
+            transform: scale(1.1);
+            background-color: lightblue;
+        }
+    </style>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBE6y6qDrWEuUBVTY_ovWkaQv4aG9u407I",
+            authDomain: "phenoguess-test.firebaseapp.com",
+            projectId: "phenoguess-test",
+            storageBucket: "phenoguess-test.firebasestorage.app",
+            messagingSenderId: "510781444453",
+            appId: "1:510781444453:web:3f908d155fd769cc16d18c",
+            databaseURL: "https://phenoguess-test-default-rtdb.europe-west1.firebasedatabase.app/"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // Fetch and display lobbies in real-time
+        function refreshLobbies() {
+            const lobbiesRef = ref(db, 'lobbies');
+            const lobbyDataTable = document.getElementById("lobby-data");
+
+            onValue(lobbiesRef, (snapshot) => {
+                const data = snapshot.val();
+                lobbyDataTable.innerHTML = ""; // Clear existing data
+
+                if (data) {
+                    Object.keys(data).forEach((lobbyId) => {
+                        const lobby = data[lobbyId];
+                        const currentPlayersCount = Object.keys(lobby.players || {}).length;
+
+                        const row = document.createElement("tr");
+                        row.innerHTML = `
+                            <td>${lobby.name}</td>
+                            <td>${currentPlayersCount}/${lobby.maxPlayers}</td>
+                            <td>${lobby.rounds}</td>
+                            <td>
+                                <button class="join-button" onclick="joinLobby('${lobbyId}', '${lobby.host}')">Join</button>
+                            </td>
+                        `;
+                        lobbyDataTable.appendChild(row);
+                    });
+                } else {
+                    const row = document.createElement("tr");
+                    row.innerHTML = `
+                        <td colspan="4" style="color: gray; font-size: 14px;">No lobbies available. Create a new one!</td>
+                    `;
+                    lobbyDataTable.appendChild(row);
+                }
+            });
+        }
+
+        // Join a lobby
+        window.joinLobby = function joinLobby(lobbyId, host) {
+            const username = prompt("Enter your username to join the lobby hosted by " + host + ":");
+            if (username) {
+                const lobbyRef = ref(db, `lobbies/${lobbyId}`);
+                onValue(lobbyRef, (snapshot) => {
+                    const lobby = snapshot.val();
+                    const players = lobby.players || {};
+
+                    if (Object.keys(players).length >= lobby.maxPlayers) {
+                        alert("Lobby is full!");
+                        return;
+                    }
+
+                    players[username] = true;
+
+                    update(lobbyRef, { players }).then(() => {
+                        localStorage.setItem("lobbyId", lobbyId);
+                        localStorage.setItem("username", username);
+                        window.location.href = "waitingroom.html";
+                    }).catch((error) => {
+                        console.error("Error joining lobby:", error);
+                        alert("An error occurred. Please try again.");
+                    });
+                }, { onlyOnce: true });
+            }
+        };
+
+        // Refresh lobbies on page load
+        window.onload = refreshLobbies;
+    </script>
+</head>
+<body>
+    <img id="back-button" src="back.png" alt="Back Button" onclick="window.location.href='createjoin.html'">
+    <img id="refresh-button" src="refresh.png" alt="Refresh Button" onclick="refreshLobbies()">
+
+    <div id="lobby-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Lobby Name</th>
+                    <th>Players</th>
+                    <th>Rounds</th>
+                    <th>Session</th>
+                </tr>
+            </thead>
+            <tbody id="lobby-data">
+                <!-- Lobby data will be dynamically inserted here -->
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

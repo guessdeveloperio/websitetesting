@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeoGuess Game</title>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+  <style>
+    @font-face {
+      font-family: "CustomFont";
+      src: url("custom-font.ttf") format("truetype");
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: black;
+    }
+
+    #map {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .person-photo {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      border: 3px solid white;
+      border-radius: 5px;
+      width: 300px;
+      height: auto;
+      cursor: pointer;
+      transition: transform 0.3s ease;
+    }
+
+    .person-photo.enlarged {
+      transform: scale(2);
+      transform-origin: top right;
+      z-index: 10;
+    }
+
+    .guess-button {
+      position: absolute;
+      bottom: 40px;
+      right: 15px;
+      background: url("guess.png") no-repeat center center;
+      background-size: cover;
+      width: 200px;
+      height: 60px;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.3s ease;
+    }
+
+    .guess-button:hover {
+      transform: scale(1.1);
+    }
+
+    .round-image {
+      position: absolute;
+      top: 20px;
+      left: -15px;
+      width: 160px;
+      height: auto;
+    }
+
+    .timer {
+      position: absolute;
+      top: 110px;
+      left: 12px;
+      font-size: 30px;
+      color: white;
+      font-family: "CustomFont", Arial, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <img id="person-photo" src="" alt="Person" class="person-photo" onclick="togglePhoto()">
+  <img id="round-image" src="round1.png" alt="Round" class="round-image">
+  <div class="timer" id="timer">01:00</div>
+  <button class="guess-button" onclick="submitGuess()"></button>
+  <audio id="bg-music" loop>
+    <source src="background.mp3" type="audio/mpeg">
+  </audio>
+  <audio id="click-sound">
+    <source src="click-sound.mp3" type="audio/mpeg">
+  </audio>
+  <audio id="result-sound">
+    <source src="result-sound.mp3" type="audio/mpeg">
+  </audio>
+
+  <script>
+    const maxRounds = 5;
+    let currentRound = JSON.parse(localStorage.getItem('currentRound')) || 1;
+
+    mapboxgl.accessToken = 'pk.eyJ1IjoiZGV2ZWxvcGVybWFwc3Rlc3QiLCJhIjoiY200cmkxdDY0MDVhZDJpc2V1ZWRsbmE0eCJ9.ZeJtn0qumV8gNDXa50E2GA';
+    const map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/mapbox/satellite-streets-v12',
+      center: [8.6821, 50.1109],
+      zoom: 1.5,
+      projection: 'globe'
+    });
+
+    const marker = new mapboxgl.Marker({
+      element: createCustomMarker(),
+      draggable: true,
+      anchor: 'bottom', // Align the marker to the bottom
+      offset: [-6, 0], // Adjust position (15px left, 10px up)
+    }).setLngLat([8.6821, 50.1109])
+      .addTo(map);
+
+    map.on('click', (event) => {
+      const coordinates = event.lngLat;
+      marker.setLngLat([coordinates.lng, coordinates.lat]);
+      document.getElementById('click-sound').play();
+    });
+
+    async function loadRandomPhoto() {
+      const response = await fetch('coordinates.json');
+      const coordinatesData = await response.json();
+      const photoNames = Object.keys(coordinatesData);
+      const randomPhoto = photoNames[Math.floor(Math.random() * photoNames.length)];
+      const personPhoto = document.getElementById('person-photo');
+      personPhoto.src = `photos/${randomPhoto}`;
+      localStorage.setItem('personCoordinates', JSON.stringify(coordinatesData[randomPhoto]));
+    }
+
+    function createCustomMarker() {
+      const markerElement = document.createElement('div');
+      markerElement.style.backgroundImage = 'url("marker.png")';
+      markerElement.style.backgroundSize = 'cover';
+      markerElement.style.width = '30px';
+      markerElement.style.height = '40px';
+      markerElement.style.position = 'absolute';
+      return markerElement;
+    }
+
+    let photoZoomed = false;
+    function togglePhoto() {
+      const photo = document.getElementById('person-photo');
+      photo.classList.toggle('enlarged');
+    }
+
+    async function submitGuess() {
+      const markerCoords = marker.getLngLat();
+      localStorage.setItem('userGuess', JSON.stringify(markerCoords));
+      document.getElementById('result-sound').play();
+      setTimeout(() => {
+        window.location.href = 'result.html';
+      }, 500);
+    }
+
+    function updateRoundImage() {
+      const roundImage = document.getElementById('round-image');
+      roundImage.src = `round${currentRound}.png`;
+    }
+
+    function startTimer() {
+      const timerElement = document.getElementById('timer');
+      let timeRemaining = 60;
+
+      const timerInterval = setInterval(() => {
+        if (timeRemaining > 0) {
+          timeRemaining--;
+          const minutes = Math.floor(timeRemaining / 60);
+          const seconds = timeRemaining % 60;
+          timerElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        } else {
+          clearInterval(timerInterval);
+          submitGuess();
+        }
+      }, 1000);
+    }
+
+    document.body.addEventListener('click', () => {
+      document.getElementById('bg-music').play();
+    });
+
+    loadRandomPhoto();
+    updateRoundImage();
+    startTimer();
+  </script>
+</body>
+</html>

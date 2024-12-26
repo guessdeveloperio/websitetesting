@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeoGuess Result</title>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+  <style>
+    @font-face {
+      font-family: "CustomFont";
+      src: url("custom-font.ttf") format("truetype");
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: url("background.png") no-repeat center center fixed;
+      background-size: cover;
+      font-family: Arial, sans-serif;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      color: white;
+    }
+
+    .total-score {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 22px;
+      font-family: "CustomFont", Arial, sans-serif;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 10px 20px;
+      border-radius: 10px;
+    }
+
+    .round-image {
+      margin-top: -100px;
+      width: 300px;
+    }
+
+    .map-container {
+      position: relative;
+      width: 80%;
+      max-width: 600px;
+      height: 300px;
+      margin: 20px 0;
+      border: 3px solid white;
+      border-radius: 15px;
+      overflow: hidden;
+    }
+
+    #result-map {
+      width: 100%;
+      height: 100%;
+    }
+
+    .distance-info {
+      font-size: 20px;
+      text-align: center;
+      font-family: "CustomFont", Arial, sans-serif;
+      margin-bottom: 10px;
+    }
+
+    .score-info {
+      font-size: 18px;
+      text-align: center;
+      font-family: "CustomFont", Arial, sans-serif;
+      margin-bottom: 20px;
+    }
+
+    .next-round-button {
+      background: url("nextround.png") no-repeat center center;
+      background-size: cover;
+      width: 200px;
+      height: 60px;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.3s ease;
+    }
+
+    .next-round-button:hover {
+      transform: scale(1.1);
+    }
+  </style>
+</head>
+<body>
+  <!-- Total Score -->
+  <div class="total-score" id="total-score">Total Score: 0 points</div>
+
+  <div class="container">
+    <!-- Round Image -->
+    <img id="round-image" src="" alt="Round Result" class="round-image">
+
+    <!-- Map Container -->
+    <div class="map-container">
+      <div id="result-map"></div>
+    </div>
+
+    <!-- Distance Info -->
+    <div class="distance-info" id="distance-info"></div>
+    <div class="score-info" id="score-info"></div>
+
+    <!-- Next Round Button -->
+    <button class="next-round-button" onclick="nextRound()"></button>
+  </div>
+
+  <script>
+    mapboxgl.accessToken = 'pk.eyJ1IjoiZGV2ZWxvcGVybWFwc3Rlc3QiLCJhIjoiY200cmkxdDY0MDVhZDJpc2V1ZWRsbmE0eCJ9.ZeJtn0qumV8gNDXa50E2GA';
+
+    const map = new mapboxgl.Map({
+      container: 'result-map',
+      style: 'mapbox://styles/mapbox/satellite-streets-v12',
+      center: [0, 0],
+      zoom: 1.5,
+      projection: 'globe'
+    });
+
+    const userGuess = JSON.parse(localStorage.getItem('userGuess'));
+    const correctCoords = JSON.parse(localStorage.getItem('personCoordinates'));
+
+    const userMarker = new mapboxgl.Marker({ element: createMarker('marker.png') })
+      .setLngLat([userGuess.lng, userGuess.lat])
+      .addTo(map);
+
+    const correctMarker = new mapboxgl.Marker({ element: createMarker('flag.png') })
+      .setLngLat([correctCoords[0], correctCoords[1]])
+      .addTo(map);
+
+    const bounds = new mapboxgl.LngLatBounds();
+    bounds.extend([userGuess.lng, userGuess.lat]);
+    bounds.extend([correctCoords[0], correctCoords[1]]);
+    map.fitBounds(bounds, {
+      padding: 50,
+      maxZoom: 8,
+      duration: 1000
+    });
+
+    const lineSource = {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [userGuess.lng, userGuess.lat],
+            [correctCoords[0], correctCoords[1]]
+          ]
+        }
+      }
+    };
+
+    map.on('load', () => {
+      map.addSource('line', lineSource);
+      map.addLayer({
+        id: 'line-layer',
+        type: 'line',
+        source: 'line',
+        paint: {
+          'line-color': 'white',
+          'line-width': 2,
+          'line-dasharray': [4, 2]
+        }
+      });
+    });
+
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return (R * c).toFixed(2);
+    }
+
+    function calculateScore(distance) {
+      const maxDistance = 12000; // Maximum scoring distance
+      if (distance <= 10) return 1000;
+      const score = Math.max(0, Math.round(1000 * (1 - Math.min(distance, maxDistance) / maxDistance)));
+      return score;
+    }
+
+    const currentRound = JSON.parse(localStorage.getItem('currentRound')) || 1;
+    const totalScore = JSON.parse(localStorage.getItem('totalScore')) || 0;
+
+    const distance = calculateDistance(userGuess.lat, userGuess.lng, correctCoords[1], correctCoords[0]);
+    const score = calculateScore(distance);
+    const newTotalScore = totalScore + score;
+
+    document.getElementById('distance-info').innerText = `Distance: ${distance} km`;
+    document.getElementById('score-info').innerText = `Score: ${score} points`;
+    document.getElementById('total-score').innerText = `Total Score: ${newTotalScore} points`;
+
+    localStorage.setItem('totalScore', JSON.stringify(newTotalScore));
+    document.getElementById('round-image').src = `resultround${currentRound}.png`;
+
+    function createMarker(imageUrl) {
+      const markerElement = document.createElement('div');
+      markerElement.style.backgroundImage = `url(${imageUrl})`;
+      markerElement.style.backgroundSize = 'cover';
+      markerElement.style.width = '30px';
+      markerElement.style.height = '40px';
+      return markerElement;
+    }
+
+    function nextRound() {
+      let currentRound = JSON.parse(localStorage.getItem('currentRound')) || 1;
+      if (currentRound >= 5) {
+        alert(`Game Over! Your final score is ${newTotalScore} points.`);
+        localStorage.clear();
+        window.location.href = 'game.html';
+      } else {
+        currentRound++;
+        localStorage.setItem('currentRound', JSON.stringify(currentRound));
+        window.location.href = 'game.html';
+      }
+    }
+  </script>
+</body>
+</html>

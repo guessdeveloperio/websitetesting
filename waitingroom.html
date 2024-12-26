@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waiting Room</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: url('waitingroom.png') no-repeat center center fixed;
+            background-size: cover;
+            font-family: Arial, sans-serif;
+            color: black;
+        }
+
+        #header {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            justify-content: space-between;
+            gap: 30px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        #header span {
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 5px 10px;
+            border-radius: 10px;
+        }
+
+        #players-container {
+            position: absolute;
+            top: 200px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 800px;
+            background-color: rgba(0, 0, 50, 0.8);
+            border-radius: 15px;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-gap: 15px;
+        }
+
+        .player-slot {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 50px;
+            border-radius: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #001f3f;
+        }
+
+        #leave-button {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 80px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        #leave-button:hover {
+            transform: scale(1.1);
+        }
+
+        #start-button {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background-color: green;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 20px;
+            cursor: pointer;
+            display: none;
+        }
+
+        #footer {
+            position: absolute;
+            bottom: 80px;
+            right: 20px;
+            font-size: 20px;
+            font-weight: bold;
+            color: black;
+        }
+
+        #footer span.waiting-word {
+            display: inline-block;
+        }
+
+        #footer span.dots {
+            display: inline-block;
+            width: 20px;
+            text-align: left;
+        }
+
+        #chat-container {
+            position: absolute;
+            bottom: 120px;
+            left: 20px;
+            width: 300px;
+            height: 200px;
+            background-color: rgba(0, 0, 50, 0.8);
+            border-radius: 15px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        #chat-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            color: white;
+            font-size: 14px;
+        }
+
+        .chat-message {
+            margin-bottom: 5px;
+        }
+
+        #chat-input {
+            display: flex;
+        }
+
+        #chat-input input {
+            flex-grow: 1;
+            padding: 5px;
+            border: none;
+            border-radius: 5px;
+            margin-right: 5px;
+        }
+
+        #chat-input button {
+            padding: 5px 10px;
+            background-color: green;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getDatabase, ref, onValue, push, update, remove } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBE6y6qDrWEuUBVTY_ovWkaQv4aG9u407I",
+            authDomain: "phenoguess-test.firebaseapp.com",
+            projectId: "phenoguess-test",
+            storageBucket: "phenoguess-test.firebasestorage.app",
+            messagingSenderId: "510781444453",
+            appId: "1:510781444453:web:3f908d155fd769cc16d18c",
+            databaseURL: "https://phenoguess-test-default-rtdb.europe-west1.firebasedatabase.app/"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        const lobbyId = localStorage.getItem("lobbyId");
+        const username = localStorage.getItem("username");
+
+        if (!lobbyId || !username) {
+            alert("Invalid lobby or user session.");
+            window.location.href = "lobbies.html";
+        }
+
+        const playerColors = {};
+        const pastelColors = [
+            "#FFFFFF", "#77DD77", "#FF6961", "#779ECB", "#FDFD96",
+            "#FFB347", "#C9A0DC", "#FFB6C1", "#D2B48C", "#F5F5DC",
+            "#ADD8E6", "#90EE90"
+        ];
+
+        function startWaitingDotsAnimation() {
+            const dots = ["", ".", "..", "..."];
+            let index = 0;
+            setInterval(() => {
+                document.querySelector("#footer .dots").innerText = dots[index];
+                index = (index + 1) % dots.length;
+            }, 500);
+        }
+
+        function assignRandomColor(player) {
+            if (!playerColors[player]) {
+                const color = pastelColors[Object.keys(playerColors).length % pastelColors.length];
+                playerColors[player] = color;
+            }
+            return playerColors[player];
+        }
+
+        function refreshWaitingRoom() {
+            const playersRef = ref(db, `lobbies/${lobbyId}/players`);
+            const lobbyRef = ref(db, `lobbies/${lobbyId}`);
+
+            onValue(playersRef, (snapshot) => {
+                const players = snapshot.val() || {};
+                const playersContainer = document.getElementById("players-container");
+                playersContainer.innerHTML = "";
+
+                Object.keys(players).forEach(player => {
+                    const slot = document.createElement("div");
+                    slot.classList.add("player-slot");
+                    slot.style.backgroundColor = assignRandomColor(player);
+                    slot.innerText = player;
+                    playersContainer.appendChild(slot);
+                });
+
+                if (Object.keys(players).length === 0) {
+                    remove(lobbyRef).then(() => {
+                        window.location.href = "lobbies.html";
+                    });
+                }
+            });
+
+            onValue(lobbyRef, (snapshot) => {
+                const data = snapshot.val();
+                if (!data) {
+                    window.location.href = "lobbies.html";
+                    return;
+                }
+
+                document.getElementById("rounds-display").innerText = `Rounds: ${data.rounds || ""}`;
+                document.getElementById("players-display").innerText = `Players: ${Object.keys(data.players || {}).length}/${data.maxPlayers || ""}`;
+
+                if (data.host === username) {
+                    document.getElementById("start-button").style.display = "block";
+                }
+
+                if (data.gameStarted) {
+                    const photoRef = ref(db, `lobbies/${lobbyId}/currentPhoto`);
+                    onValue(photoRef, (photoSnapshot) => {
+                        const currentPhoto = photoSnapshot.val();
+                        localStorage.setItem("currentPhoto", currentPhoto);
+                        window.location.href = "game.html";
+                    });
+                }
+            });
+
+            const countdownRef = ref(db, `lobbies/${lobbyId}/countdown`);
+            onValue(countdownRef, (snapshot) => {
+                const countdown = snapshot.val();
+                if (countdown !== null) {
+                    document.getElementById("footer .dots").innerText = `Starting in ${countdown}...`;
+                }
+            });
+        }
+
+        function refreshChat() {
+            const chatRef = ref(db, `lobbies/${lobbyId}/chats`);
+            const chatMessages = document.getElementById("chat-messages");
+
+            onValue(chatRef, (snapshot) => {
+                const messages = snapshot.val() || {};
+                chatMessages.innerHTML = "";
+
+                Object.values(messages).forEach((message) => {
+                    const messageElement = document.createElement("div");
+                    messageElement.classList.add("chat-message");
+                    messageElement.textContent = `${message.username}: ${message.message}`;
+                    chatMessages.appendChild(messageElement);
+                });
+
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            });
+        }
+
+        function sendMessage() {
+            const chatInput = document.getElementById("chat-input-field");
+            const message = chatInput.value.trim();
+
+            if (message === "") return;
+
+            const chatRef = ref(db, `lobbies/${lobbyId}/chats`);
+            push(chatRef, {
+                username: username,
+                message: message,
+                timestamp: Date.now()
+            });
+
+            chatInput.value = "";
+        }
+
+        window.sendMessage = sendMessage; // Attach to window for global access
+
+        window.leaveLobby = function() {
+            if (confirm("Are you sure you want to leave the lobby?")) {
+                const playerRef = ref(db, `lobbies/${lobbyId}/players/${username}`);
+                const lobbyRef = ref(db, `lobbies/${lobbyId}`);
+
+                remove(playerRef).then(() => {
+                    onValue(lobbyRef, (snapshot) => {
+                        const data = snapshot.val();
+                        if (data && data.host === username) {
+                            const players = Object.keys(data.players || {});
+                            if (players.length > 0) {
+                                const newHost = players[Math.floor(Math.random() * players.length)];
+                                update(lobbyRef, { host: newHost });
+                            }
+                        }
+                    });
+
+                    localStorage.removeItem("lobbyId");
+                    localStorage.removeItem("username");
+                    window.location.href = "lobbies.html";
+                }).catch((error) => {
+                    alert("Error leaving the lobby. Please try again.");
+                    console.error(error);
+                });
+            }
+        };
+
+        function startGame() {
+            const lobbyRef = ref(db, `lobbies/${lobbyId}`);
+            const randomPhoto = Math.floor(Math.random() * 100); // Simulating random photo selection
+
+            update(lobbyRef, {
+                gameStarted: true,
+                currentPhoto: randomPhoto
+            }).then(() => {
+                localStorage.setItem("players", JSON.stringify(playerColors));
+                localStorage.setItem("lobbyId", lobbyId);
+
+                let countdown = 5;
+                const countdownInterval = setInterval(() => {
+                    if (countdown === 0) {
+                        clearInterval(countdownInterval);
+                        update(ref(db, `lobbies/${lobbyId}`), { gameStarted: true });
+                    } else {
+                        update(ref(db, `lobbies/${lobbyId}`), { countdown });
+                        document.getElementById("start-button").innerText = `Starting in ${countdown}...`;
+                        countdown--;
+                    }
+                }, 1000);
+            });
+        }
+
+        window.onload = () => {
+            refreshWaitingRoom();
+            refreshChat();
+            startWaitingDotsAnimation();
+        };
+
+        window.startGame = startGame;
+    </script>
+</head>
+<body>
+    <div id="header">
+        <span id="rounds-display">Rounds: </span>
+        <span id="players-display">Players: </span>
+    </div>
+
+    <div id="players-container"></div>
+
+    <img id="leave-button" src="leave.png" alt="Leave Button" onclick="leaveLobby()">
+    <button id="start-button" onclick="startGame()">Start Game</button>
+
+    <div id="chat-container">
+        <div id="chat-messages"></div>
+        <div id="chat-input">
+            <input type="text" id="chat-input-field" placeholder="Type a message...">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <div id="footer">
+        <span class="waiting-word">Waiting</span><span class="dots"></span>
+    </div>
+</body>
+</html>

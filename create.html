@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Lobby</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: url('createjoin.png') no-repeat center center fixed;
+            background-size: cover;
+            font-family: Arial, sans-serif;
+        }
+
+        #back-button {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 100px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        #back-button:hover {
+            transform: scale(1.1);
+        }
+
+        #form-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            width: 80%;
+            max-width: 400px;
+        }
+
+        .input-field {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 18px;
+            border: 2px solid #ccc;
+            border-radius: 25px;
+            outline: none;
+            text-align: center;
+        }
+
+        .input-field:focus {
+            border-color: #00bfff;
+        }
+
+        #create-lobby-button {
+            width: 100%;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: transform 0.3s ease;
+        }
+
+        #create-lobby-button:hover {
+            transform: scale(1.1);
+        }
+    </style>
+    <script type="module">
+        // Import Firebase SDK
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getDatabase, ref, push, set } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBE6y6qDrWEuUBVTY_ovWkaQv4aG9u407I",
+            authDomain: "phenoguess-test.firebaseapp.com",
+            projectId: "phenoguess-test",
+            storageBucket: "phenoguess-test.firebasestorage.app",
+            messagingSenderId: "510781444453",
+            appId: "1:510781444453:web:3f908d155fd769cc16d18c",
+            databaseURL: "https://phenoguess-test-default-rtdb.europe-west1.firebasedatabase.app/"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // Attach function to the global scope
+        window.createLobby = function createLobby() {
+            const lobbyName = document.getElementById('lobby-name').value;
+            const players = document.getElementById('players').value;
+            const rounds = document.getElementById('rounds').value;
+
+            if (!lobbyName || !players || !rounds) {
+                alert('Please fill out all fields!');
+                return;
+            }
+
+            const hostUsername = prompt("Enter your username (host):");
+            if (!hostUsername) {
+                alert("Username is required!");
+                return;
+            }
+
+            // Reference to lobbies in the database
+            const lobbiesRef = ref(db, 'lobbies');
+            const newLobbyRef = push(lobbiesRef);
+
+            // Lobby data to save
+            const lobbyData = {
+                host: hostUsername,
+                name: lobbyName,
+                maxPlayers: parseInt(players, 10),
+                rounds: parseInt(rounds, 10),
+                players: { [hostUsername]: true },
+                isGameStarted: false
+            };
+
+            // Save data to Firebase and redirect
+            set(newLobbyRef, lobbyData)
+                .then(() => {
+                    console.log("Lobby created successfully:", newLobbyRef.key);
+                    localStorage.setItem("lobbyId", newLobbyRef.key);
+                    localStorage.setItem("username", hostUsername);
+                    window.location.href = "waitingroom.html"; // Ensure the path is correct
+                })
+                .catch((error) => {
+                    console.error("Error creating lobby:", error);
+                    alert("An error occurred. Please try again.");
+                });
+        };
+    </script>
+</head>
+<body>
+    <a href="createjoin.html">
+        <img src="back.png" alt="Back" id="back-button">
+    </a>
+
+    <div id="form-container">
+        <input type="text" class="input-field" id="lobby-name" placeholder="Lobby Name">
+        <input type="number" class="input-field" id="players" placeholder="Players">
+        <input type="number" class="input-field" id="rounds" placeholder="Rounds">
+        <img src="create lobby.png" alt="Create Lobby" id="create-lobby-button" onclick="createLobby()">
+    </div>
+</body>
+</html>
+f
